@@ -1,1 +1,2 @@
+RCP/trained_classifier_proto/best_new_model.pth filter=lfs diff=lfs merge=lfs -text
 trained_classifier_proto/best_new_model.pth filter=lfs diff=lfs merge=lfs -text
