@@ -1,0 +1,17 @@
+LICENSE
+README.md
+setup.py
+bambird/__init__.py
+bambird/cluster.py
+bambird/config.py
+bambird/dataset.py
+bambird/features.py
+bambird/segmentation.py
+bambird/segmentation_extract_rois_core.py
+bambird/segmentation_extract_rois_full_sig.py
+bambird/version.py
+bambird.egg-info/PKG-INFO
+bambird.egg-info/SOURCES.txt
+bambird.egg-info/dependency_links.txt
+bambird.egg-info/requires.txt
+bambird.egg-info/top_level.txt

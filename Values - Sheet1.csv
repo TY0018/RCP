@@ -1,0 +1,141 @@
+predicted_start,predicted_end,label,,,,,,,
+0:05.59,0:08.27,Large Billed Crow,,,,,0:05.8,0:08.1,large billed crow
+0:19.37,0:21.73,Plaintive Cuckoo,,,,,0:27.0,0:30.0,plaintive cuckoo
+0:27.01,0:30.16,Plaintive Cuckoo,,,,,0:41.0,0:48.0,plaintive cuckoo
+0:41.03,0:48.35,Plaintive Cuckoo,,,,,0:52.0,1:02.0,oriental reed warbler
+0:52.53,1:02.29,Oriental Reed Warbler,,,,,1:07.0,2:08.0,oriental reed warbler
+1:07.73,2:08.36,Oriental Reed Warbler,,,,,2:26.0,2:30.0,striated heron
+2:26.00,2:30.41,Striates Heron,,,,,2:59.0,3:02.0,large billed crow
+2:59.47,3:02.15,Large Billed Crow,,,,,3:13.0,3:19.0,stork billed kingfisher
+3:13.65,3:19.00,Stork Billed Kingfisher,,,,,3:30.0,3:31.0,oriental reed warbler
+3:36.64,3:37.59,Oriental Reed Warbler,,,,,3:36.0,3:37.0,oriental reed warbler
+3:42.15,3:43.10,Oriental Reed Warbler,,,,,3:42.0,3:42.3,oriental reed warbler
+4:23.66,4:26.02,Large Billed Crow,,,,,4:24.0,4:25.7,large billed crow
+4:30.27,4:32.63,Large Billed Crow,,,,,4:30.0,4:32.0,large billed crow
+4:42.08,4:44.37,Large Billed Crow,,,,,4:42.0,4:44.0,large billed crow
+4:48.86,4:50.04,Large Billed Crow,,,,,4:49.0,4:49.7,large billed crow
+4:57.83,4:59.17,Large Billed Crow,,,,,4:58.0,4:58.7,large billed crow
+5:18.54,5:26.18,Pin Striped Tit Babbler,,,,,5:18.0,5:25.0,pin striped tit babbler
+5:35.00,5:38.15,Pin Striped Tit Babbler,,,,,5:35.0,5:37.0,pin striped tit babbler
+5:42.56,5:45.08,Pin Striped Tit Babbler,,,,,5:42.0,5:44.0,pin striped tit babbler
+5:46.66,5:50.91,Pin Striped Tit Babbler,,,,,5:47.0,5:50.0,pin striped tit babbler
+6:00.36,6:05.56,Pin Striped Tit Babbler,,,,,6:00.0,6:05.0,pin striped tit babbler
+6:18.79,6:21.62,Pin Striped Tit Babbler,,,,,6:19.0,6:21.0,pin striped tit babbler
+6:30.92,6:33.28,Pin Striped Tit Babbler,,,,,6:31.0,6:33.0,pin striped tit babbler
+6:37.85,6:40.37,Pin Striped Tit Babbler,,,,,6:38.0,6:40.0,pin striped tit babbler
+6:45.17,6:48.63,Pin Striped Tit Babbler,,,,,6:45.0,6:48.0,pin striped tit babbler
+6:52.97,6:54.62,Pin Striped Tit Babbler,,,,,6:53.0,6:54.0,pin striped tit babbler
+7:04.54,7:05.72,Red Junglefowl,,,,,7:04.0,7:07.0,red junglefowl
+7:05.80,7:07.30,Red Junglefowl,,,,,7:18.0,7:20.0,red junglefowl
+7:17.61,7:19.27,Red Junglefowl,,,,,7:54.0,7:56.0,red junglefowl
+7:19.27,7:20.76,Red Junglefowl,,,,,8:16.0,8:18.0,red junglefowl
+7:53.68,7:55.02,Red Junglefowl,,,,,8:41.0,8:43.0,red junglefowl
+7:54.94,7:56.52,Red Junglefowl,,,,,9:02.0,9:03.0,asian koel
+8:16.28,8:17.31,Red Junglefowl,,,,,9:07.0,9:07.7,asian koel
+8:17.38,8:18.80,Asian Koel,,,,,9:10.0,9:10.7,asian koel
+8:40.54,8:41.80,Red Junglefowl,,,,,9:12.0,9:13.0,asian koel
+8:41.88,8:43.29,Red Junglefowl,,,,,9:15.0,9:16.0,asian koel
+9:02.04,9:03.45,Asian Koel,,,,,9:18.0,9:18.7,asian koel
+9:07.00,9:08.26,Asian Koel,,,,,9:23.0,9:23.8,asian koel
+9:09.68,9:11.01,Asian Koel,,,,,9:28.0,9:28.6,asian koel
+9:12.12,9:13.53,Asian Koel,,,,,9:30.0,9:32.0,asian koel
+9:14.87,9:16.29,Asian Koel,,,,,9:37.0,9:42.0,pin striped tit babbler
+9:17.71,9:19.20,Asian Koel,,,,,9:43.0,9:54.0,pin striped tit babbler
+9:22.67,9:24.24,Asian Koel,,,,,9:55.0,9:58.0,pin striped tit babbler
+9:27.71,9:29.20,Asian Koel,,,,,10:00.0,10:02.0,pin striped tit babbler
+9:29.60,9:32.83,Asian Koel,,,,,10:04.0,10:21.0,pin striped tit babbler
+9:37.71,9:42.91,Pin Striped Tit Babbler,,,,,10:50.0,11:03.0,white breasted waterhen
+9:43.46,9:54.96,Pin Striped Tit Babbler,,,,,11:05.0,11:19.0,white breasted waterhen
+9:55.90,9:58.50,Pin Striped Tit Babbler,,,,,11:21.0,11:31.0,white breasted waterhen
+10:00.63,10:02.75,Pin Striped Tit Babbler,,,,,11:37.0,11:38.0,large billed crow
+10:04.72,10:21.50,Pin Striped Tit Babbler,,,,,11:49.0,11:51.0,large billed crow
+10:49.69,11:04.10,White Breasted Waterhen,,,,,11:59.0,12:01.0,large billed crow
+11:04.97,11:20.16,White Breasted Waterhen,,,,,12:08.0,12:09.0,large billed crow
+11:21.19,11:32.06,White Breasted Waterhen,,,,,12:42.0,12:43.0,red junglefowl
+11:36.70,11:39.22,Large Billed Crow,,,,,12:43.0,12:50.0,fan
+11:49.07,11:51.43,Large Billed Crow,,,,,12:50.0,12:50.8,asian koel
+11:59.46,12:01.90,Large Billed Crow,,,,,12:54.0,12:55.0,asian koel
+12:08.36,12:09.54,Large Billed Crow,,,,,12:57.0,12:58.0,asian koel
+12:41.99,12:51.12,Red Junglefowl,,,,,12:59.0,13:00.0,asian koel
+12:54.43,12:55.53,Asian Koel,,,,,13:04.0,13:05.0,white throated kingfisher
+12:57.10,12:58.29,Asian Koel,,,,,13:06.0,13:09.0,white throated kingfisher
+12:59.47,13:00.73,Asian Koel,,,,,13:14.0,13:15.0,white throated kingfisher
+13:03.72,13:05.45,White Throated Kingfisher,,,,,13:21.0,13:22.0,white throated kingfisher
+13:06.16,13:09.86,White Throated Kingfisher,,,,,13:26.0,13:29.0,white throated kingfisher
+13:13.96,13:16.08,White Throated Kingfisher,,,,,13:31.0,13:33.0,white throated kingfisher
+13:20.81,13:22.62,White Throated Kingfisher,,,,,13:38.0,13:38.5,large tailed nightjar
+13:26.24,13:30.02,White Throated Kingfisher,,,,,13:40.0,13:42.0,large tailed nightjar
+13:31.12,13:33.09,White Throated Kingfisher,,,,,13:44.0,13:46.0,large tailed nightjar
+13:40.42,13:42.39,Large Tailed Nightjar,,,,,13:48.0,13:49.0,large tailed nightjar
+13:44.36,13:46.17,Large Tailed Nightjar,,,,,13:51.0,13:52.0,large tailed nightjar
+13:47.74,13:49.47,Large Tailed Nightjar,,,,,13:54.0,13:55.0,large tailed nightjar
+13:51.21,13:53.02,Large Tailed Nightjar,,,,,13:57.0,13:59.0,large tailed nightjar
+13:54.44,13:55.38,Large Tailed Nightjar,,,,,14:00.0,14:02.0,large tailed nightjar
+13:57.35,13:59.16,Large Tailed Nightjar,,,,,14:04.0,14:04.7,large tailed nightjar
+14:00.50,14:02.31,Large Tailed Nightjar,,,,,14:08.0,14:08.7,large tailed nightjar
+14:03.81,14:04.75,Large Tailed Nightjar,,,,,14:11.0,14:14.0,large tailed nightjar
+14:07.90,14:08.69,Large Tailed Nightjar,,,,,14:16.0,14:18.0,large tailed nightjar
+14:11.52,14:14.20,Large Tailed Nightjar,,,,,14:20.0,14:22.0,large tailed nightjar
+14:16.49,14:18.45,Large Tailed Nightjar,,,,,14:24.0,14:25.0,large tailed nightjar
+14:20.27,14:22.16,Large Tailed Nightjar,,,,,14:27.0,14:28.0,large tailed nightjar
+14:23.89,14:25.70,Large Tailed Nightjar,,,,,14:31.0,14:32.0,large tailed nightjar
+14:26.72,14:28.61,Large Tailed Nightjar,,,,,14:34.0,14:35.0,large tailed nightjar
+14:30.66,14:32.55,Large Tailed Nightjar,,,,,14:38.0,14:38.6,large tailed nightjar
+14:34.20,14:36.02,Large Tailed Nightjar,,,,,14:44.0,14:45.0,large tailed nightjar
+14:37.83,14:38.69,Large Tailed Nightjar,,,,,14:49.0,14:50.0,large tailed nightjar
+14:43.81,14:45.78,Large Tailed Nightjar,,,,,14:52.0,14:53.0,large tailed nightjar
+14:49.01,14:49.88,Large Tailed Nightjar,,,,,15:01.0,15:12.0,striated heron
+14:52.32,14:53.18,Large Tailed Nightjar,,,,,15:24.0,15:25.0,red junglefowl
+15:09.41,15:13.26,Striated Heron,,,,,15:38.0,15:40.0,red junglefowl
+15:23.58,15:24.76,Red Junglefowl,,,,,15:51.0,15:53.0,red junglefowl
+15:24.84,15:26.18,Red Junglefowl,,,,,15:58.0,15:59.0,greater racket tailed drongo
+15:37.76,15:38.86,,,,,,16:02.0,16:04.0,greater racket tailed drongo
+15:38.94,15:40.35,Red Junglefowl,,,,,16:06.0,16:07.0,greater racket tailed drongo
+15:50.75,15:52.01,Red Junglefowl,,,,,16:08.0,16:11.0,greater racket tailed drongo
+15:52.01,15:53.50,Red Junglefowl,,,,,16:13.0,16:15.0,greater racket tailed drongo
+15:58.31,16:00.12,Greater Racket Tailed Drongo,,,,,16:21.0,16:25.0,greater racket tailed drongo
+16:01.54,16:04.69,Greater Racket Tailed Drongo,,,,,16:27.0,16:28.0,greater racket tailed drongo
+16:05.79,16:07.52,Greater Racket Tailed Drongo,,,,,16:30.0,16:31.0,greater racket tailed drongo
+16:08.23,16:11.85,Greater Racket Tailed Drongo,,,,,16:33.0,16:34.0,greater racket tailed drongo
+16:13.51,16:16.11,Greater Racket Tailed Drongo,,,,,16:36.0,16:38.0,greater racket tailed drongo
+16:20.60,16:25.40,Greater Racket Tailed Drongo,,,,,16:43.0,16:45.0,dark necked tailorbird
+16:27.05,16:28.63,Greater Racket Tailed Drongo,,,,,16:47.0,16:49.0,dark necked tailorbird
+16:30.28,16:31.86,Greater Racket Tailed Drongo,,,,,16:51.0,16:56.0,dark necked tailorbird
+16:33.35,16:34.69,Greater Racket Tailed Drongo,,,,,16:57.0,16:59.0,dark necked tailorbird
+16:36.27,16:38.16,Greater Racket Tailed Drongo,,,,,17:04.0,17:06.0,red wattled lapwing
+16:43.43,16:46.03,Dark Necked Tailor Bird,,,,,17:07.0,17:09.0,red wattled lapwing
+16:46.66,16:50.13,Dark Necked Tailor Bird,,,,,17:10.0,17:10.7,red wattled lapwing
+16:51.23,16:56.27,Dark Necked Tailor Bird,,,,,17:11.0,17:12.0,red wattled lapwing
+16:57.21,16:59.42,Dark Necked Tailor Bird,,,,,17:13.0,17:13.8,red wattled lapwing
+17:04.62,17:06.43,Red Wattled Lapwing,,,,,17:17.0,17:18.0,red wattled lapwing
+17:07.53,17:09.34,Red Wattled Lapwing,,,,,17:19.0,17:29.0,red wattled lapwing
+17:09.74,17:11.15,Red Wattled Lapwing,,,,,17:30.0,17:30.8,red wattled lapwing
+17:11.07,17:12.65,Red Wattled Lapwing,,,,,17:33.0,17:37.0,car
+17:12.65,17:14.15,Red Wattled Lapwing,,,,,17:42.0,17:48.0,dark necked tailorbird
+17:17.61,17:19.03,Red Wattled Lapwing,,,,,17:48.0,17:52.0,car
+17:19.34,17:20.68,Red Wattled Lapwing,,,,,17:52.0,17:52.8,dark necked tailorbird
+17:29.50,17:31.08,Red Wattled Lapwing,,,,,17:54.0,17:56.0,dark necked tailorbird
+17:34.23,17:36.59,,FP: CAR,,,,17:57.0,17:59.0,dark necked tailorbird
+17:42.26,17:53.13,Red Wattled Lapwing,,,,,18:13.0,18:14.0,spotted dove
+17:54.07,17:56.28,Red Wattled Lapwing,,,,,18:17.0,18:18.0,spotted dove
+17:57.46,17:59.35,Red Wattled Lapwing,,,,,18:19.0,18:20.0,spotted dove
+18:04.31,18:06.83,,FP,,,,18:21.0,18:22.0,spotted dove
+18:13.29,18:14.78,Spotted Dove,,,,,18:24.0,18:25.0,spotted dove
+18:16.99,18:18.56,Spotted Dove,,,,,18:27.0,18:28.0,spotted dove
+18:19.11,18:20.69,Spotted Dove,,,,,18:30.0,18:31.0,spotted dove
+18:21.24,18:22.82,Spotted Dove,,,,,18:32.0,18:33.0,spotted dove
+18:24.63,18:26.20,Spotted Dove,,,,,18:42.0,18:44.0,fan
+18:27.54,18:29.04,Spotted Dove,,,,,18:44.0,18:45.0,indian cuckoo
+18:29.90,18:31.48,Spotted Dove,,,,,18:47.0,18:49.0,indian cuckoo
+18:31.71,18:33.37,Spotted Dove,,,,,18:52.0,18:53.0,indian cuckoo
+18:42.58,18:45.89,Indian Cuckoo,,,,,18:57.0,18:58.0,black naped monarch
+18:47.62,18:49.20,Indian Cuckoo,,,,,19:04.0,19:04.7,black naped monarch
+18:52.35,18:58.80,Indian Cuckoo and Black Naped Monarch,,,,,19:07.0,19:09.0,black naped monarch
+19:03.53,19:05.03,Black Naped Monarch,,,,,19:25.0,19:27.0,greater coucal
+19:07.23,19:09.51,Black Naped Monarch,,,,,19:31.0,19:31.2,greater coucal
+19:25.42,19:27.78,Greater Coucal,,,,,19:39.0,19:40.0,greater coucal
+19:31.17,19:32.43,Greater Coucal,,,,,19:43.0,19:45.0,crested serpent eagle
+19:39.28,19:41.25,Greater Coucal,,,,,19:48.0,19:49.0,crested serpent eagle
+19:43.46,19:45.98,Crested Serpent Eagle,,,,,19:56.0,20:00.0,car
+19:48.02,19:50.07,Crested Serpent Eagle,,,,,,,
+19:57.39,20:00.15,,FP: Car,,,,,,

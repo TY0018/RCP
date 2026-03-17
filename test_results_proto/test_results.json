@@ -1,0 +1,29 @@
+{
+  "metrics": {
+    "top1_accuracy": 0.9103516051539637,
+    "top3_accuracy": 0.955885564533741,
+    "cmAP": 0.9590916338626387,
+    "auroc": 0.9979723383167411
+  },
+  "timing": {
+    "total_inference_time_s": 1035.844961212948,
+    "avg_per_sample_ms": 113.10820716454991,
+    "num_samples": 9158
+  },
+  "benchmark": {
+    "total_params": 88282752,
+    "trainable_params": 720384,
+    "backbone_params": 87562368,
+    "projection_params": 525824,
+    "proto_params": 194560,
+    "model_size_mb": 336.77197265625,
+    "avg_inference_ms": 11.039338055998087,
+    "throughput_per_sec": 90.58514151187374
+  },
+  "config": {
+    "model_checkpoint": "/home/users/ntu/ytong005/trained_classifier_proto/best_new_model.pth",
+    "test_csv": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/balanced_sg_dataset1/balanced_test.csv",
+    "protos_per_class": 5,
+    "num_classes": 76
+  }
+}

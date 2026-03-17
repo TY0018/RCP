@@ -1,0 +1,25 @@
+{
+  "best_epoch": 12,
+  "best_val_loss": 0.36296254464282357,
+  "best_val_acc": 92.0656634746922,
+  "test_top1_acc": 0.9209434374317537,
+  "test_top3_acc": 0.9620004367765888,
+  "test_cmAP": 0.9644239897205689,
+  "test_auroc": 0.9981170887270281,
+  "num_classes": 76,
+  "config": {
+    "train_csv": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/balanced_sg_dataset1/balanced_train.csv",
+    "test_csv": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/balanced_sg_dataset1/balanced_test.csv",
+    "base_model": "DBD-research-group/AudioProtoPNet-5-BirdSet-XCL",
+    "save_dir": "./trained_classifier_logitnorm",
+    "sample_rate": 32000,
+    "chunk_batch_size": 16,
+    "batch_size": 8,
+    "epochs": 20,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "patience": 5,
+    "min_delta": 0.001,
+    "device": "cuda"
+  }
+}
