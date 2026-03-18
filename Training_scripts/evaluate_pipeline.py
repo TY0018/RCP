@@ -6,9 +6,6 @@ using the prototype-based model (new_classification.py), and applies open-set
 recognition (OSR) using min_distance thresholding to reject unknown classes.
 
 Computes AUROC, cmAP, and Top-1 Accuracy against the ground truth labels.
-
-Usage:
-    python classify_detections.py
 """
 
 import os
@@ -23,16 +20,19 @@ from transformers import AutoModel, AutoFeatureExtractor
 from sklearn.metrics import average_precision_score, roc_auc_score, accuracy_score
 from sklearn.preprocessing import label_binarize
 from tqdm import tqdm
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for saving plots
+import matplotlib.pyplot as plt
 
 # ==========================================
 # CONFIGURATION
 # ==========================================
 CONFIG = {
     # Audio file
-    "audio_file": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/test20min1.wav",
+    "audio_file": "/home/users/ntu/ytong005/scratch/test20min1.wav",
     
     # Detection results CSV
-    "detections_csv": "/home/users/ntu/ytong005/AudioProto/Values - Sheet1.csv",
+    "detections_csv": "/home/users/ntu/ytong005/RCP/MatchedDetections.csv",
     
     # Model
     "base_model": "DBD-research-group/AudioProtoPNet-5-BirdSet-XCL",
@@ -44,24 +44,23 @@ CONFIG = {
     # Prototype parameters (must match training)
     "protos_per_class": 5,
     
-    # OSR threshold — segments with min_distance > threshold are marked "unknown"
-    # You can tune this from the evaluate_open_set.py results (threshold_95tpr)
-    "osr_method": "min_distance",  # or "max_softmax", "entropy"
-    "osr_threshold": None,  # None = auto-determine from data; or set a float value
-    
+    "use_min_distance": True,
+    "use_max_softmax": False,
+    "osr_threshold":  -8.132477760314941,
+    "max_softmax_threshold": 0.2237648069858551,
     # Parameters
     "sample_rate": 32000,
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     
     # Output
-    "output_dir": "./detection_classification_results",
+    "output_dir": "RCP/full_pipeline_results/dist",
 }
 
 os.makedirs(CONFIG["output_dir"], exist_ok=True)
 
 
 # ==========================================
-# MODEL (from new_classification.py)
+# MODEL
 # ==========================================
 
 class MultiPrototypeLayer(nn.Module):
@@ -172,11 +171,6 @@ def build_common_name_mapping():
     
     print(f"\n📋 Training set has {len(train_categories)} categories")
     
-    # Build mapping from common name (lowercase) -> training category
-    # Strategy: extract common name part from training categories  
-    # Training format is typically Genus_species
-    # We need to match "Large Billed Crow" -> the correct Genus_species
-    
     # Try loading label2name.json if available for reverse mapping
     label2name_paths = [
         "/home/users/ntu/ytong005/dataset_json/label2name.json",
@@ -184,6 +178,7 @@ def build_common_name_mapping():
     ]
     
     common_to_category = {}
+    category_to_common = {}
     
     for path in label2name_paths:
         if os.path.exists(path):
@@ -207,7 +202,10 @@ def build_common_name_mapping():
                         genus_species = scientific.replace(' ', '_')
                         
                         if genus_species in train_categories:
-                            common_to_category[common.lower()] = genus_species
+                            # Normalize hyphens to spaces for consistent matching
+                            normalized_common = common.lower().replace('-', ' ')
+                            common_to_category[normalized_common] = genus_species
+                            category_to_common[genus_species] = common
             
             if common_to_category:
                 print(f"  ✓ Loaded {len(common_to_category)} common name mappings from {path}")
@@ -221,8 +219,9 @@ def build_common_name_mapping():
             # Genus_species -> "genus species"
             common_guess = cat.replace('_', ' ').lower()
             common_to_category[common_guess] = cat
+            category_to_common[cat] = cat.replace('_', ' ').title()
     
-    return common_to_category, train_categories
+    return common_to_category, category_to_common, train_categories
 
 
 # ==========================================
@@ -236,20 +235,28 @@ def load_detections(csv_path, common_to_category, train_categories):
     """
     df = pd.read_csv(csv_path)
     
-    # Use first 3 columns: predicted_start, predicted_end, label
-    col_start = df.columns[0]  # 'predicted_start'
-    col_end = df.columns[1]    # 'predicted_end'
-    col_label = df.columns[2]  # 'label'
+    # Check if this is the new matched format
+    has_matched = 'pred_start' in df.columns and 'gt_label' in df.columns
+    
+    col_start = 'pred_start' if has_matched else df.columns[0]
+    col_end = 'pred_end' if has_matched else df.columns[1]
+    col_label = 'gt_label' if has_matched else df.columns[2]
     
     segments = []
     known_species = set(train_categories)
     
     for idx, row in df.iterrows():
+        # Skip False Negatives (no predicted interval to classify)
+        if has_matched and 'result' in df.columns and str(row.get('result', '')).strip() == 'FN':
+            continue
+        
         start = parse_timestamp(row[col_start])
         end = parse_timestamp(row[col_end])
         
+        # We skip False Negatives for inference (missing start/end predictions)
         if start is None or end is None:
             continue
+            
         
         # Get ground truth label
         raw_label = str(row[col_label]).strip() if pd.notna(row[col_label]) else ""
@@ -272,12 +279,13 @@ def load_detections(csv_path, common_to_category, train_categories):
             if " and " in raw_label:
                 raw_label = raw_label.split(" and ")[0].strip()
             
-            common_lower = raw_label.lower()
+            common_lower = raw_label.lower().replace('-', ' ')
             if common_lower in common_to_category:
                 gt_category = common_to_category[common_lower]
                 gt_label = raw_label
                 is_known = gt_category in known_species
             else:
+                # Label not in label2name.json → treat as unknown class
                 gt_label = raw_label
                 gt_category = None
                 is_known = False
@@ -475,9 +483,9 @@ def compute_osr_threshold(segments, results):
     """
     Auto-determine OSR threshold from the data at 95% TPR.
     Uses known-species segments as positives, FP/unknown as negatives.
-    Returns (threshold, osr_auroc).
+    Returns (threshold, osr_auroc, plot_data_dict).
     """
-    from sklearn.metrics import roc_curve, auc
+    from sklearn.metrics import roc_curve, auc, precision_recall_curve
     
     known_scores = []
     unknown_scores = []
@@ -494,13 +502,16 @@ def compute_osr_threshold(segments, results):
     
     if len(known_scores) == 0 or len(unknown_scores) == 0:
         print("⚠️  Cannot compute threshold — need both known and unknown segments")
-        return None, None
+        return None, None, None
     
     y_true = np.array([1] * len(known_scores) + [0] * len(unknown_scores))
     y_scores = np.array(known_scores + unknown_scores)
     
     fpr, tpr, thresholds = roc_curve(y_true, y_scores)
     osr_auroc = auc(fpr, tpr)
+    
+    precision, recall, _ = precision_recall_curve(y_true, y_scores)
+    osr_aupr = auc(recall, precision)
     
     # Find threshold at 95% TPR
     idx_95 = np.argmax(tpr >= 0.95)
@@ -509,10 +520,18 @@ def compute_osr_threshold(segments, results):
     
     print(f"\n📊 OSR Threshold Auto-Detection:")
     print(f"  AUROC:           {osr_auroc:.4f}")
+    print(f"  AUPR:            {osr_aupr:.4f}")
     print(f"  Threshold @95%TPR: {threshold_95tpr:.4f}")
     print(f"  FPR @95%TPR:     {fpr_at_95tpr:.4f}")
     
-    return threshold_95tpr, osr_auroc
+    plot_data = {
+        'fpr': fpr, 'tpr': tpr, 'auroc': osr_auroc,
+        'precision': precision, 'recall': recall, 'aupr': osr_aupr,
+        'fpr_at_95tpr': fpr_at_95tpr,
+        'known_scores': known_scores, 'unknown_scores': unknown_scores,
+    }
+    
+    return threshold_95tpr, osr_auroc, plot_data
 
 
 def compute_open_set_metrics(segments, results, category2id, id2category, 
@@ -549,10 +568,19 @@ def compute_open_set_metrics(segments, results, category2id, id2category,
         else:
             true_idx = UNKNOWN_IDX  # FP, blank, or unknown species
         
-        # --- OSR decision ---
+        # --- OSR decision (multi-method) ---
         osr_score = -res["min_distance"]  # Higher = more confident
+        max_soft = res["max_softmax"]
         
-        if osr_score >= osr_threshold:
+        should_reject = False
+        if CONFIG["use_min_distance"] and osr_score < osr_threshold:
+            should_reject = True
+        if CONFIG["use_max_softmax"]:
+            ms_thresh = CONFIG["max_softmax_threshold"] if CONFIG["max_softmax_threshold"] is not None else 0.5
+            if max_soft < ms_thresh:
+                should_reject = True
+        
+        if not should_reject:
             # Accept: use model's classification
             pred_idx = res["pred_idx"]
             accepted += 1
@@ -655,7 +683,7 @@ def main():
     
     # Build common name mapping
     print("📋 Building species name mapping...")
-    common_to_category, train_categories = build_common_name_mapping()
+    common_to_category, category_to_common, train_categories = build_common_name_mapping()
     
     # Show mapping for verification
     print(f"\n  Common Name Mapping Preview:")
@@ -705,10 +733,11 @@ def main():
     # B. OSR threshold detection
     # ========================================
     osr_threshold = CONFIG["osr_threshold"]
+    osr_plot_data = None
     if osr_threshold is None:
-        osr_threshold, osr_auroc = compute_osr_threshold(segments, results)
+        osr_threshold, osr_auroc, osr_plot_data = compute_osr_threshold(segments, results)
     else:
-        _, osr_auroc = compute_osr_threshold(segments, results)
+        _, osr_auroc, osr_plot_data = compute_osr_threshold(segments, results)
         print(f"  Using manual threshold: {osr_threshold}")
     
     # ========================================
@@ -725,9 +754,9 @@ def main():
     # ========================================
     # Print detailed per-segment results
     # ========================================
-    print(f"\n{'=' * 100}")
-    print(f"{'Time':<16} {'Ground Truth':<25} {'Prediction':<25} {'Conf':<8} {'MinDist':<10} {'OSR':<10}")
-    print(f"{'-' * 100}")
+    print(f"\n{'=' * 115}")
+    print(f"{'Time':<16} {'Ground Truth':<25} {'Prediction (Scientific + Common)':<40} {'Conf':<8} {'MinDist':<10} {'OSR':<10}")
+    print(f"{'-' * 115}")
     
     for seg, res in zip(segments, results):
         if res is None:
@@ -735,32 +764,46 @@ def main():
         
         time_str = f"{seg['start']:.1f}-{seg['end']:.1f}s"
         gt = seg['gt_label'][:23] if seg['gt_label'] else "—"
-        pred = res['pred_category'][:23]
+        
+        pred_cat = res['pred_category']
+        common_name = category_to_common.get(pred_cat, "")
+        if common_name:
+            pred = f"{pred_cat} ({common_name})"[:38]
+        else:
+            pred = pred_cat[:38]
+            
         conf = f"{res['pred_confidence']:.3f}"
         dist = f"{res['min_distance']:.1f}"
         
-        # OSR decision
+        # OSR decision (multi-method)
         osr_score = -res["min_distance"]
-        if osr_threshold is not None:
-            osr_decision = "Accept" if osr_score >= osr_threshold else "REJECT"
-        else:
-            osr_decision = "—"
+        max_soft = res["max_softmax"]
+        
+        should_reject = False
+        if CONFIG["use_min_distance"] and osr_threshold is not None and osr_score < osr_threshold:
+            should_reject = True
+        if CONFIG["use_max_softmax"]:
+            ms_thresh = CONFIG["max_softmax_threshold"] if CONFIG["max_softmax_threshold"] is not None else 0.5
+            if max_soft < ms_thresh:
+                should_reject = True
+        
+        osr_decision = "REJECT" if should_reject else "Accept"
         
         # Correctness
         if seg['gt_category'] is not None:
-            if osr_threshold is not None and osr_score < osr_threshold:
+            if should_reject:
                 match = "✗ (rejected)"
             elif res['pred_category'] == seg['gt_category']:
                 match = "✓"
             else:
                 match = "✗"
         else:
-            if osr_threshold is not None and osr_score < osr_threshold:
+            if should_reject:
                 match = "✓ (rejected FP)"
             else:
                 match = "FP (missed)"
         
-        print(f"{time_str:<16} {gt:<25} {pred:<25} {conf:<8} {dist:<10} {osr_decision:<10} {match}")
+        print(f"{time_str:<16} {gt:<25} {pred:<40} {conf:<8} {dist:<10} {osr_decision:<10} {match}")
     
     # ========================================
     # Print summary
@@ -828,7 +871,62 @@ def main():
     with open(output_path, 'w') as f:
         json.dump(output, f, indent=2)
     
-    print(f"\n Results saved to {output_path}")
+    print(f"\n💾 Results saved to {output_path}")
+    
+    # --- Save Plots ---
+    if osr_plot_data is not None:
+        plot_dir = CONFIG["output_dir"]
+        
+        # 1. ROC Curve
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(osr_plot_data['fpr'], osr_plot_data['tpr'], color='#2196F3', lw=2,
+                label=f'ROC Curve (AUROC = {osr_plot_data["auroc"]:.4f})')
+        ax.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random')
+        ax.scatter(osr_plot_data['fpr_at_95tpr'], 0.95, color='red', s=80, zorder=5,
+                   label=f'FPR@95%TPR = {osr_plot_data["fpr_at_95tpr"]:.4f}')
+        ax.set_xlabel('False Positive Rate', fontsize=12)
+        ax.set_ylabel('True Positive Rate', fontsize=12)
+        ax.set_title('OSR ROC Curve (Known vs Unknown)', fontsize=14)
+        ax.legend(loc='lower right', fontsize=10)
+        ax.grid(True, alpha=0.3)
+        roc_path = os.path.join(plot_dir, 'osr_roc_curve.png')
+        fig.savefig(roc_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  📊 ROC Curve saved to {roc_path}")
+        
+        # 2. Precision-Recall Curve
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.plot(osr_plot_data['recall'], osr_plot_data['precision'], color='#4CAF50', lw=2,
+                label=f'PR Curve (AUPR = {osr_plot_data["aupr"]:.4f})')
+        ax.set_xlabel('Recall', fontsize=12)
+        ax.set_ylabel('Precision', fontsize=12)
+        ax.set_title('OSR Precision-Recall Curve (Known vs Unknown)', fontsize=14)
+        ax.legend(loc='lower left', fontsize=10)
+        ax.grid(True, alpha=0.3)
+        pr_path = os.path.join(plot_dir, 'osr_pr_curve.png')
+        fig.savefig(pr_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  📊 PR Curve saved to {pr_path}")
+        
+        # 3. Score Distribution
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.hist(osr_plot_data['known_scores'], bins=50, alpha=0.6, color='#2196F3',
+                label=f'Known ({len(osr_plot_data["known_scores"])})', density=True)
+        ax.hist(osr_plot_data['unknown_scores'], bins=50, alpha=0.6, color='#F44336',
+                label=f'Unknown ({len(osr_plot_data["unknown_scores"])})', density=True)
+        if osr_threshold is not None:
+            ax.axvline(x=osr_threshold, color='black', linestyle='--', lw=2,
+                       label=f'Threshold = {osr_threshold:.4f}')
+        ax.set_xlabel('Min Distance Score (higher = more confident)', fontsize=12)
+        ax.set_ylabel('Density', fontsize=12)
+        ax.set_title('Score Distribution: Known vs Unknown', fontsize=14)
+        ax.legend(fontsize=10)
+        ax.grid(True, alpha=0.3)
+        dist_path = os.path.join(plot_dir, 'osr_score_distribution.png')
+        fig.savefig(dist_path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
+        print(f"  📊 Score Distribution saved to {dist_path}")
+    
     print(f"{'=' * 60}\n")
 
 
