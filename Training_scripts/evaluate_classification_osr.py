@@ -495,9 +495,14 @@ def main():
         known_scores = [r["min_distance_score"] for r in results if r["is_known_gt"]]
         unknown_scores = [r["min_distance_score"] for r in results if not r["is_known_gt"]]
         
+        all_scores = known_scores + unknown_scores
+        # We take the 1st percentile for the lower bound and a bit above the max for the upper
+        lower_limit = np.percentile(all_scores, 1) 
+        upper_limit = max(all_scores) * 1.05 if max(all_scores) > 0 else 0.5
+
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.hist(known_scores, bins=50, alpha=0.6, color='#2196F3', label=f'Known ({len(known_scores)})', density=True)
-        ax.hist(unknown_scores, bins=50, alpha=0.6, color='#F44336', label=f'Unknown ({len(unknown_scores)})', density=True)
+        ax.hist(known_scores, bins=50, alpha=0.6, color='#2196F3', range=(lower_limit, upper_limit), label=f'Known ({len(known_scores)})', density=True)
+        ax.hist(unknown_scores, bins=50, alpha=0.6, color='#F44336', range=(lower_limit, upper_limit), label=f'Unknown ({len(unknown_scores)})', density=True)
         ax.axvline(x=min_dist_threshold, color='black', linestyle='--', lw=2, label=f'Threshold = {min_dist_threshold:.4f}')
         ax.set_xlabel('Min Distance Score (higher = more confident)', fontsize=12)
         ax.set_ylabel('Density', fontsize=12)

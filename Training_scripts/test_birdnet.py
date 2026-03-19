@@ -254,47 +254,44 @@ def benchmark_birdnet(num_runs=50):
     
     model = AudioModelV2M4Protobuf()
     
-    # --- Parameter count (TensorFlow) ---
+    # --- Parameter count (TensorFlow 2.x Robust Version) ---
     try:
         import tensorflow as tf
+        import numpy as np
+
+        # 1. Try to find the underlying TF object
+        # BirdNET Protobuf wrapper usually stores the model in model.model or model._model
+        tf_obj = None
+        for attr in ['model', '_model', 'interpreter']:
+            if hasattr(model, attr):
+                tf_obj = getattr(model, attr)
+                break
         
-        # Access the underlying TF model
-        if hasattr(model, '_model'):
-            tf_model = model._model
-        elif hasattr(model, 'model'):
-            tf_model = model.model
-        else:
-            tf_model = None
-        
-        if tf_model is not None and hasattr(tf_model, 'count_params'):
-            total_params = tf_model.count_params()
-            model_size_mb = total_params * 4 / (1024 ** 2)
-            print(f"\n  Total params:       {total_params:,}")
-            print(f"  Model size (FP32):  {model_size_mb:.1f} MB")
-        else:
-            # Try counting from graph variables
-            total_params = sum(
-                np.prod(v.shape) for v in tf.compat.v1.global_variables()
-            ) if hasattr(tf, 'compat') else 0
-            model_size_mb = total_params * 4 / (1024 ** 2) if total_params > 0 else 0
+        if tf_obj is not None:
+            # Check if it's a Keras model (has count_params)
+            if hasattr(tf_obj, 'count_params'):
+                total_params = tf_obj.count_params()
+            # If it's a SavedModel/Protobuf, it has a .variables list
+            elif hasattr(tf_obj, 'variables'):
+                total_params = sum([np.prod(v.shape) for v in tf_obj.variables])
+            else:
+                total_params = 0
+                
             if total_params > 0:
+                model_size_mb = (total_params * 4) / (1024 ** 2)
                 print(f"\n  Total params:       {total_params:,}")
                 print(f"  Model size (FP32):  {model_size_mb:.1f} MB")
             else:
-                print(f"\n  Total params:       (could not access TF graph)")
-                model_size_mb = 0
-                
-        # Check if GPU is being used
+                print(f"\n  Total params:       (Object found but no variables detected)")
+        else:
+            print(f"\n  Total params:       (Could not find underlying TF object in BirdNET wrapper)")
+
+        # Check for GPU
         gpus = tf.config.list_physical_devices('GPU')
         print(f"  TF GPUs available:  {len(gpus)}")
-        if gpus:
-            for gpu in gpus:
-                print(f"    - {gpu.name}")
-                
+        
     except Exception as e:
         print(f"\n  Parameter count:    (error: {e})")
-        total_params = 0
-        model_size_mb = 0
     
     # --- Inference latency ---
     # Create a dummy 5s audio file for benchmarking
