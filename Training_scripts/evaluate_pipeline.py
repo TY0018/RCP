@@ -45,7 +45,7 @@ CONFIG = {
     "protos_per_class": 5,
     
     "use_min_distance": True,
-    "use_max_softmax": False,
+    "use_max_softmax": True,
     "osr_threshold":  -8.132477760314941,
     "max_softmax_threshold": 0.2237648069858551,
     # Parameters
@@ -53,7 +53,7 @@ CONFIG = {
     "device": "cuda" if torch.cuda.is_available() else "cpu",
     
     # Output
-    "output_dir": "RCP/full_pipeline_results/dist",
+    "output_dir": "RCP/full_pipeline_results/dist_softmax",
 }
 
 os.makedirs(CONFIG["output_dir"], exist_ok=True)
@@ -533,27 +533,190 @@ def compute_osr_threshold(segments, results):
     
     return threshold_95tpr, osr_auroc, plot_data
 
+def compute_oscr(known_scores, known_correct_flags, unknown_scores):
+    """
+    Computes CCR (Correct Classification Rate) and FPR (False Positive Rate) 
+    for the OSCR curve.
+    """
+    thresholds = np.unique(np.concatenate([known_scores, unknown_scores]))
+    thresholds = np.sort(thresholds)[::-1]  # Sort descending
+    
+    ccr = []
+    fpr = []
+    n_known = len(known_scores)
+    n_unknown = len(unknown_scores)
+    
+    if n_known == 0 or n_unknown == 0:
+        return np.array([0]), np.array([0])
+        
+    for t in thresholds:
+        correct_and_accepted = np.sum((known_scores >= t) & known_correct_flags)
+        ccr.append(correct_and_accepted / n_known)
+        
+        false_positives = np.sum(unknown_scores >= t)
+        fpr.append(false_positives / n_unknown)
+        
+    return np.array(fpr), np.array(ccr)
+
+# def compute_open_set_metrics(segments, results, category2id, id2category, 
+#                              num_classes, osr_threshold):
+#     """
+#     Open-set metrics: ALL segments are evaluated.
+    
+#     - Known species with gt_category → true label = class index
+#     - FP/blank/unknown → true label = num_classes ("unknown" class)
+    
+#     Model prediction:
+#     - If OSR score >= threshold → predict the model's top class
+#     - If OSR score < threshold  → predict "unknown" (index = num_classes)
+    
+#     A correct prediction for an FP segment = model rejects it as unknown.
+#     A correct prediction for a known segment = model classifies it correctly AND accepts it.
+#     """
+#     UNKNOWN_IDX = num_classes  # Extra class index for "unknown"
+    
+#     all_true = []
+#     all_pred = []
+#     all_probs_extended = []  # num_classes + 1 columns
+    
+#     accepted = 0
+#     rejected = 0
+    
+#     for seg, res in zip(segments, results):
+#         if res is None:
+#             continue
+        
+#         # --- Ground truth ---
+#         if seg["gt_category"] is not None and seg["is_known"]:
+#             true_idx = category2id[seg["gt_category"]]
+#         else:
+#             true_idx = UNKNOWN_IDX  # FP, blank, or unknown species
+        
+#         # --- OSR decision (multi-method) ---
+#         osr_score = -res["min_distance"]  # Higher = more confident
+#         max_soft = res["max_softmax"]
+        
+#         should_reject = False
+#         if CONFIG["use_min_distance"] and osr_score < osr_threshold:
+#             should_reject = True
+#         if CONFIG["use_max_softmax"]:
+#             ms_thresh = CONFIG["max_softmax_threshold"] if CONFIG["max_softmax_threshold"] is not None else 0.5
+#             if max_soft < ms_thresh:
+#                 should_reject = True
+        
+#         if not should_reject:
+#             # Accept: use model's classification
+#             pred_idx = res["pred_idx"]
+#             accepted += 1
+#         else:
+#             # Reject: predict "unknown"
+#             pred_idx = UNKNOWN_IDX
+#             rejected += 1
+        
+#         all_true.append(true_idx)
+#         all_pred.append(pred_idx)
+        
+#         # Build extended probability vector (add unknown "probability")
+#         # Use 1 - max_softmax as a proxy for unknown probability
+#         known_probs = res["probs"]
+#         unknown_prob = 1.0 - res["max_softmax"]
+#         extended = np.append(known_probs, unknown_prob)
+#         all_probs_extended.append(extended)
+    
+#     all_true = np.array(all_true)
+#     all_pred = np.array(all_pred)
+#     all_probs_extended = np.vstack(all_probs_extended)
+    
+#     total = len(all_true)
+#     num_known_gt = np.sum(all_true != UNKNOWN_IDX)
+#     num_unknown_gt = np.sum(all_true == UNKNOWN_IDX)
+    
+#     print(f"\n📊 Open-Set Evaluation ({total} segments):")
+#     print(f"  Ground truth: {num_known_gt} known, {num_unknown_gt} unknown/FP")
+#     print(f"  Model: {accepted} accepted, {rejected} rejected as unknown")
+    
+#     # --- Open-set Top-1 Accuracy ---
+#     # Correct if: known segment classified correctly AND accepted,
+#     #          OR unknown segment rejected
+#     os_t1_acc = accuracy_score(all_true, all_pred)
+    
+#     # --- Break down accuracy ---
+#     # Known species: correctly classified AND not rejected
+#     known_mask = all_true != UNKNOWN_IDX
+#     if np.sum(known_mask) > 0:
+#         known_correct = np.sum((all_pred == all_true) & known_mask)
+#         known_acc = known_correct / np.sum(known_mask)
+#     else:
+#         known_acc = 0.0
+    
+#     # Unknown/FP: correctly rejected
+#     unknown_mask = all_true == UNKNOWN_IDX
+#     if np.sum(unknown_mask) > 0:
+#         unknown_correct = np.sum((all_pred == UNKNOWN_IDX) & unknown_mask)
+#         rejection_acc = unknown_correct / np.sum(unknown_mask)
+#     else:
+#         rejection_acc = 0.0
+    
+#     # --- Open-set cmAP ---
+#     # Include the unknown class as an additional class
+#     num_classes_ext = num_classes + 1
+#     y_true_bin = label_binarize(all_true, classes=range(num_classes_ext))
+    
+#     active_classes = [i for i in range(num_classes_ext) if np.sum(y_true_bin[:, i]) > 0]
+    
+#     try:
+#         os_cmAP = np.mean([
+#             average_precision_score(y_true_bin[:, i], all_probs_extended[:, i])
+#             for i in active_classes
+#         ])
+#     except:
+#         os_cmAP = 0.0
+    
+#     # --- Open-set AUROC ---
+#     try:
+#         os_auroc = np.mean([
+#             roc_auc_score(y_true_bin[:, i], all_probs_extended[:, i])
+#             for i in active_classes
+#             if len(np.unique(y_true_bin[:, i])) > 1
+#         ])
+#     except:
+#         os_auroc = 0.0
+    
+#     return {
+#         "os_t1_acc": os_t1_acc,
+#         "known_acc": known_acc,
+#         "rejection_acc": rejection_acc,
+#         "os_cmAP": os_cmAP,
+#         "os_auroc": os_auroc,
+#         "accepted": accepted,
+#         "rejected": rejected,
+#         "total": total,
+#     }
 
 def compute_open_set_metrics(segments, results, category2id, id2category, 
                              num_classes, osr_threshold):
-    """
-    Open-set metrics: ALL segments are evaluated.
+    from sklearn.metrics import accuracy_score, average_precision_score, roc_auc_score, auc
+    from sklearn.preprocessing import label_binarize
+    import numpy as np
     
-    - Known species with gt_category → true label = class index
-    - FP/blank/unknown → true label = num_classes ("unknown" class)
-    
-    Model prediction:
-    - If OSR score >= threshold → predict the model's top class
-    - If OSR score < threshold  → predict "unknown" (index = num_classes)
-    
-    A correct prediction for an FP segment = model rejects it as unknown.
-    A correct prediction for a known segment = model classifies it correctly AND accepts it.
-    """
-    UNKNOWN_IDX = num_classes  # Extra class index for "unknown"
+    UNKNOWN_IDX = num_classes  
     
     all_true = []
     all_pred = []
-    all_probs_extended = []  # num_classes + 1 columns
+    all_probs_extended = []
+    
+    # Tracking for OSCR and Precision/Recall
+    k_correct_flags = []
+    k_scores_dist = []
+    k_scores_msp = []
+    u_scores_dist = []
+    u_scores_msp = []
+    
+    tp = 0  # True Positive: Known, correctly ID'd, accepted
+    tn = 0  # True Negative: Unknown, rejected
+    fp_noise = 0      # False Positive: Unknown, accepted
+    fp_misclass = 0   # False Positive: Known, wrong ID, accepted
+    fn = 0  # False Negative: Known, rejected
     
     accepted = 0
     rejected = 0
@@ -562,114 +725,115 @@ def compute_open_set_metrics(segments, results, category2id, id2category,
         if res is None:
             continue
         
-        # --- Ground truth ---
-        if seg["gt_category"] is not None and seg["is_known"]:
-            true_idx = category2id[seg["gt_category"]]
-        else:
-            true_idx = UNKNOWN_IDX  # FP, blank, or unknown species
+        # Ground truth
+        is_known_gt = seg["gt_category"] is not None and seg["is_known"]
+        true_idx = category2id[seg["gt_category"]] if is_known_gt else UNKNOWN_IDX
         
-        # --- OSR decision (multi-method) ---
-        osr_score = -res["min_distance"]  # Higher = more confident
+        # Scores
+        osr_score = -res["min_distance"]  
         max_soft = res["max_softmax"]
+        pred_idx = res["pred_idx"]
         
+        # Dual-Gate Rejection Logic
         should_reject = False
-        if CONFIG["use_min_distance"] and osr_score < osr_threshold:
+        if CONFIG.get("use_min_distance", True) and osr_score < osr_threshold:
             should_reject = True
-        if CONFIG["use_max_softmax"]:
-            ms_thresh = CONFIG["max_softmax_threshold"] if CONFIG["max_softmax_threshold"] is not None else 0.5
+        if CONFIG.get("use_max_softmax", False):
+            ms_thresh = CONFIG.get("max_softmax_threshold", 0.5)
             if max_soft < ms_thresh:
                 should_reject = True
         
+        # Track for standard metrics
         if not should_reject:
-            # Accept: use model's classification
-            pred_idx = res["pred_idx"]
+            final_pred = pred_idx
             accepted += 1
         else:
-            # Reject: predict "unknown"
-            pred_idx = UNKNOWN_IDX
+            final_pred = UNKNOWN_IDX
             rejected += 1
+            
+        # Track for Precision/Recall
+        if is_known_gt:
+            k_correct_flags.append(pred_idx == true_idx)
+            k_scores_dist.append(osr_score)
+            k_scores_msp.append(max_soft)
+            
+            if not should_reject and pred_idx == true_idx:
+                tp += 1
+            elif not should_reject and pred_idx != true_idx:
+                fp_misclass += 1
+            else:
+                fn += 1
+        else:
+            u_scores_dist.append(osr_score)
+            u_scores_msp.append(max_soft)
+            
+            if should_reject:
+                tn += 1
+            else:
+                fp_noise += 1
         
         all_true.append(true_idx)
-        all_pred.append(pred_idx)
+        all_pred.append(final_pred)
         
-        # Build extended probability vector (add unknown "probability")
-        # Use 1 - max_softmax as a proxy for unknown probability
         known_probs = res["probs"]
-        unknown_prob = 1.0 - res["max_softmax"]
-        extended = np.append(known_probs, unknown_prob)
-        all_probs_extended.append(extended)
+        unknown_prob = 1.0 - max_soft
+        all_probs_extended.append(np.append(known_probs, unknown_prob))
     
+    # Calculate Precision, Recall, F1, Accuracy
+    total_fp = fp_noise + fp_misclass
+    num_k = tp + fp_misclass + fn
+    num_u = tn + fp_noise
+    total = num_k + num_u
+    
+    precision = tp / (tp + total_fp) if (tp + total_fp) > 0 else 0.0
+    recall = tp / num_k if num_k > 0 else 0.0
+    f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0.0
+    total_accuracy = (tp + tn) / total if total > 0 else 0.0
+    
+    # Calculate OSCR
+    k_scores_dist = np.array(k_scores_dist)
+    k_scores_msp = np.array(k_scores_msp)
+    k_correct_flags = np.array(k_correct_flags)
+    u_scores_dist = np.array(u_scores_dist)
+    u_scores_msp = np.array(u_scores_msp)
+    
+    fpr_dist, ccr_dist = compute_oscr(k_scores_dist, k_correct_flags, u_scores_dist)
+    fpr_msp, ccr_msp = compute_oscr(k_scores_msp, k_correct_flags, u_scores_msp)
+    
+    auoscr_dist = auc(fpr_dist, ccr_dist) if len(fpr_dist) > 1 else 0.0
+    auoscr_msp = auc(fpr_msp, ccr_msp) if len(fpr_msp) > 1 else 0.0
+
+    # Format return dictionary
     all_true = np.array(all_true)
     all_pred = np.array(all_pred)
     all_probs_extended = np.vstack(all_probs_extended)
     
-    total = len(all_true)
-    num_known_gt = np.sum(all_true != UNKNOWN_IDX)
-    num_unknown_gt = np.sum(all_true == UNKNOWN_IDX)
-    
-    print(f"\n📊 Open-Set Evaluation ({total} segments):")
-    print(f"  Ground truth: {num_known_gt} known, {num_unknown_gt} unknown/FP")
-    print(f"  Model: {accepted} accepted, {rejected} rejected as unknown")
-    
-    # --- Open-set Top-1 Accuracy ---
-    # Correct if: known segment classified correctly AND accepted,
-    #          OR unknown segment rejected
+    # Legacy Accuracy calculations (kept for your existing print statements)
     os_t1_acc = accuracy_score(all_true, all_pred)
-    
-    # --- Break down accuracy ---
-    # Known species: correctly classified AND not rejected
     known_mask = all_true != UNKNOWN_IDX
-    if np.sum(known_mask) > 0:
-        known_correct = np.sum((all_pred == all_true) & known_mask)
-        known_acc = known_correct / np.sum(known_mask)
-    else:
-        known_acc = 0.0
-    
-    # Unknown/FP: correctly rejected
+    known_acc = np.sum((all_pred == all_true) & known_mask) / np.sum(known_mask) if np.sum(known_mask) > 0 else 0.0
     unknown_mask = all_true == UNKNOWN_IDX
-    if np.sum(unknown_mask) > 0:
-        unknown_correct = np.sum((all_pred == UNKNOWN_IDX) & unknown_mask)
-        rejection_acc = unknown_correct / np.sum(unknown_mask)
-    else:
-        rejection_acc = 0.0
-    
-    # --- Open-set cmAP ---
-    # Include the unknown class as an additional class
-    num_classes_ext = num_classes + 1
-    y_true_bin = label_binarize(all_true, classes=range(num_classes_ext))
-    
-    active_classes = [i for i in range(num_classes_ext) if np.sum(y_true_bin[:, i]) > 0]
-    
-    try:
-        os_cmAP = np.mean([
-            average_precision_score(y_true_bin[:, i], all_probs_extended[:, i])
-            for i in active_classes
-        ])
-    except:
-        os_cmAP = 0.0
-    
-    # --- Open-set AUROC ---
-    try:
-        os_auroc = np.mean([
-            roc_auc_score(y_true_bin[:, i], all_probs_extended[:, i])
-            for i in active_classes
-            if len(np.unique(y_true_bin[:, i])) > 1
-        ])
-    except:
-        os_auroc = 0.0
-    
+    rejection_acc = np.sum((all_pred == UNKNOWN_IDX) & unknown_mask) / np.sum(unknown_mask) if np.sum(unknown_mask) > 0 else 0.0
+
     return {
         "os_t1_acc": os_t1_acc,
         "known_acc": known_acc,
         "rejection_acc": rejection_acc,
-        "os_cmAP": os_cmAP,
-        "os_auroc": os_auroc,
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1,
+        "total_accuracy": total_accuracy,
+        "auoscr_dist": auoscr_dist,
+        "auoscr_msp": auoscr_msp,
+        "fpr_dist": fpr_dist,
+        "ccr_dist": ccr_dist,
+        "fpr_msp": fpr_msp,
+        "ccr_msp": ccr_msp,
+        "tp": tp, "tn": tn, "fp_noise": fp_noise, "fp_misclass": fp_misclass, "fn": fn,
         "accepted": accepted,
         "rejected": rejected,
         "total": total,
     }
-
-
 # ==========================================
 # MAIN
 # ==========================================
@@ -816,118 +980,227 @@ def main():
     print(f"  AUROC:          {cs_auroc:.4f}")
     print(f"{'=' * 60}")
     
-    if os_metrics is not None:
-        print(f"\nOPEN-SET RESULTS (all {os_metrics['total']} segments, threshold={osr_threshold:.4f}):")
-        print(f"  Overall Accuracy:   {os_metrics['os_t1_acc']:.4f}")
-        print(f"  Known Species Acc:  {os_metrics['known_acc']:.4f}  (correctly classified & accepted)")
-        print(f"  Rejection Acc:      {os_metrics['rejection_acc']:.4f}  (FP/unknown correctly rejected)")
-        print(f"  Open-set cmAP:      {os_metrics['os_cmAP']:.4f}")
-        print(f"  Open-set AUROC:     {os_metrics['os_auroc']:.4f}")
-        print(f"  Accepted/Rejected:  {os_metrics['accepted']}/{os_metrics['rejected']}")
+    # if os_metrics is not None:
+    #     print(f"\nOPEN-SET RESULTS (all {os_metrics['total']} segments, threshold={osr_threshold:.4f}):")
+    #     print(f"  Overall Accuracy:   {os_metrics['os_t1_acc']:.4f}")
+    #     print(f"  Known Species Acc:  {os_metrics['known_acc']:.4f}  (correctly classified & accepted)")
+    #     print(f"  Rejection Acc:      {os_metrics['rejection_acc']:.4f}  (FP/unknown correctly rejected)")
+    #     print(f"  Open-set cmAP:      {os_metrics['os_cmAP']:.4f}")
+    #     print(f"  Open-set AUROC:     {os_metrics['os_auroc']:.4f}")
+    #     print(f"  Accepted/Rejected:  {os_metrics['accepted']}/{os_metrics['rejected']}")
     
-    if osr_auroc is not None:
-        print(f"\nOSR SEPARATION (known vs FP/unknown):")
-        print(f"  Min Distance AUROC: {osr_auroc:.4f}")
+    # if osr_auroc is not None:
+    #     print(f"\nOSR SEPARATION (known vs FP/unknown):")
+    #     print(f"  Min Distance AUROC: {osr_auroc:.4f}")
     
     print(f"{'=' * 60}")
-    
-    # Save results
-    output = {
-        "closed_set": {
-            "top1_accuracy": float(cs_t1),
-            "top3_accuracy": float(cs_top3),
-            "cmAP": float(cs_cmAP),
-            "auroc": float(cs_auroc),
-        },
-        "open_set": os_metrics if os_metrics else {},
-        "osr": {
-            "min_distance_auroc": float(osr_auroc) if osr_auroc else None,
-            "threshold": float(osr_threshold) if osr_threshold else None,
-        },
-        "segments": []
-    }
-    
-    for seg, res in zip(segments, results):
-        if res is None:
-            continue
-        osr_score = -res["min_distance"]
-        osr_decision = "accept" if (osr_threshold and osr_score >= osr_threshold) else "reject"
+    if os_metrics is not None:
+        print(f"\nOPEN-SET RESULTS (all {os_metrics['total']} segments, threshold={osr_threshold:.4f}):")
+        print(f"  Isolated Min-Dist AUOSCR: {os_metrics['auoscr_dist']:.4f}")
+        print(f"  Isolated Max-Soft AUOSCR: {os_metrics['auoscr_msp']:.4f}")
+        print(f"  -------------------------------------------")
+        print(f"  HYBRID SYSTEM OVERALL METRICS:")
+        print(f"    Precision:          {os_metrics['precision']:.4f}")
+        print(f"    Recall (CCR):       {os_metrics['recall']:.4f}")
+        print(f"    F1-Score:           {os_metrics['f1_score']:.4f}")
+        print(f"    Total Accuracy:     {os_metrics['total_accuracy']:.4f}")
+        print(f"  -------------------------------------------")
+        print(f"  System Breakdown:")
+        print(f"    True Positives:     {os_metrics['tp']}")
+        print(f"    True Negatives:     {os_metrics['tn']}")
+        print(f"    False Positives:    {os_metrics['fp_noise']} (Noise) + {os_metrics['fp_misclass']} (Misclassified)")
+        print(f"    False Negatives:    {os_metrics['fn']}")
+        print(f"    Accepted/Rejected:  {os_metrics['accepted']}/{os_metrics['rejected']}")
         
-        output["segments"].append({
-            "start": seg["start"],
-            "end": seg["end"],
-            "gt_label": seg["gt_label"],
-            "gt_category": seg["gt_category"],
-            "is_known": seg["is_known"],
-            "pred_category": res["pred_category"],
-            "pred_confidence": float(res["pred_confidence"]),
-            "min_distance": float(res["min_distance"]),
-            "max_softmax": float(res["max_softmax"]),
-            "entropy": float(res["entropy"]),
-            "osr_decision": osr_decision,
-        })
+        # ========================================
+        # --- GENERATE PLOTS ---
+        # ========================================
+        if 'fpr_dist' in os_metrics and len(os_metrics['fpr_dist']) > 1:
+            plot_dir = CONFIG["output_dir"]
+            os.makedirs(plot_dir, exist_ok=True)
+            
+            # 1. OSCR Curve Plot (Hybrid System)
+            fig, ax = plt.subplots(figsize=(10, 7))
+            ax.plot(os_metrics['fpr_dist'], os_metrics['ccr_dist'], color='#2196F3', lw=2, 
+                    label=f'Min-Distance (AUOSCR: {os_metrics["auoscr_dist"]:.4f})')
+            ax.plot(os_metrics['fpr_msp'], os_metrics['ccr_msp'], color='#FF9800', lw=2, linestyle='--', 
+                    label=f'Max-Softmax (AUOSCR: {os_metrics["auoscr_msp"]:.4f})')
+            
+            hybrid_fpr = os_metrics['fp_noise'] / (os_metrics['tn'] + os_metrics['fp_noise']) if (os_metrics['tn'] + os_metrics['fp_noise']) > 0 else 0
+            ax.plot(hybrid_fpr, os_metrics['recall'], marker='*', markersize=15, color='red', 
+                    linestyle='None', label='Hybrid System (Dual-Gate)', markeredgecolor='black')
     
-    output_path = os.path.join(CONFIG["output_dir"], "pipeline_results.json")
-    with open(output_path, 'w') as f:
-        json.dump(output, f, indent=2)
+            ax.set_xscale('log') 
+            ax.set_xlabel('False Positive Rate (log scale)', fontsize=12)
+            ax.set_ylabel('Correct Classification Rate', fontsize=12)
+            ax.set_title('OSCR Curves: Min-Dist vs. MSP with Hybrid Operating Point', fontsize=14)
+            ax.legend(loc='lower right', fontsize=10)
+            ax.grid(True, which="both", alpha=0.3)
+            
+            oscr_path = os.path.join(plot_dir, 'combined_oscr_comparison.png')
+            fig.savefig(oscr_path, dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            print(f"  📊 Combined OSCR Plot saved to {oscr_path}")
+            
+            # --- Extract Scores for Distributions ---
+            known_dist, unknown_dist = [], []
+            known_msp, unknown_msp = [], []
+            
+            for seg, res in zip(segments, results):
+                if res is None: continue
+                is_known_gt = seg["gt_category"] is not None and seg["is_known"]
+                
+                if is_known_gt:
+                    known_dist.append(-res["min_distance"])
+                    known_msp.append(res["max_softmax"])
+                else:
+                    unknown_dist.append(-res["min_distance"])
+                    unknown_msp.append(res["max_softmax"])
+
+            # 2. Min-Distance Score Distribution Plot
+            if known_dist and unknown_dist:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                
+                # Percentile clipping to ignore extreme distance outliers
+                all_dist = known_dist + unknown_dist
+                lower_limit = np.percentile(all_dist, 1)
+                upper_limit = max(all_dist) * 1.05 if max(all_dist) > 0 else 0.5
+                
+                ax.hist(known_dist, bins=50, alpha=0.6, color='#2196F3', range=(lower_limit, upper_limit), label=f'Known ({len(known_dist)})', density=True)
+                ax.hist(unknown_dist, bins=50, alpha=0.6, color='#F44336', range=(lower_limit, upper_limit), label=f'Unknown ({len(unknown_dist)})', density=True)
+                
+                if osr_threshold is not None:
+                    ax.axvline(x=osr_threshold, color='black', linestyle='--', lw=2, label=f'Dist Threshold = {osr_threshold:.4f}')
+                
+                ax.set_xlabel('Min Distance Score (higher = more confident)', fontsize=12)
+                ax.set_ylabel('Density', fontsize=12)
+                ax.set_title('Score Distribution (Min-Distance): Known vs Unknown', fontsize=14)
+                ax.legend(fontsize=10)
+                ax.grid(True, alpha=0.3)
+                
+                dist_path = os.path.join(plot_dir, 'osr_score_dist_mindist.png')
+                fig.savefig(dist_path, dpi=150, bbox_inches='tight')
+                plt.close(fig)
+                print(f"  📊 Min-Distance Dist saved to {dist_path}")
+
+            # 3. Max-Softmax Score Distribution Plot
+            if known_msp and unknown_msp:
+                fig, ax = plt.subplots(figsize=(10, 6))
+                
+                # Softmax is always 0 to 1, so we can fix the range easily
+                ax.hist(known_msp, bins=50, alpha=0.6, color='#FF9800', range=(0, 1), label=f'Known ({len(known_msp)})', density=True)
+                ax.hist(unknown_msp, bins=50, alpha=0.6, color='#9C27B0', range=(0, 1), label=f'Unknown ({len(unknown_msp)})', density=True)
+                
+                ms_thresh = CONFIG.get("max_softmax_threshold", 0.5)
+                ax.axvline(x=ms_thresh, color='black', linestyle='--', lw=2, label=f'MSP Threshold = {ms_thresh:.4f}')
+                
+                ax.set_xlabel('Max Softmax Probability (0.0 to 1.0)', fontsize=12)
+                ax.set_ylabel('Density', fontsize=12)
+                ax.set_title('Score Distribution (Max Softmax): Known vs Unknown', fontsize=14)
+                ax.legend(fontsize=10)
+                ax.grid(True, alpha=0.3)
+                
+                msp_path = os.path.join(plot_dir, 'osr_score_dist_maxsoftmax.png')
+                fig.savefig(msp_path, dpi=150, bbox_inches='tight')
+                plt.close(fig)
+                print(f"  📊 Max-Softmax Dist saved to {msp_path}")
+    # # Save results
+    # output = {
+    #     "closed_set": {
+    #         "top1_accuracy": float(cs_t1),
+    #         "top3_accuracy": float(cs_top3),
+    #         "cmAP": float(cs_cmAP),
+    #         "auroc": float(cs_auroc),
+    #     },
+    #     "open_set": os_metrics if os_metrics else {},
+    #     "osr": {
+    #         "min_distance_auroc": float(osr_auroc) if osr_auroc else None,
+    #         "threshold": float(osr_threshold) if osr_threshold else None,
+    #     },
+    #     "segments": []
+    # }
     
-    print(f"\n💾 Results saved to {output_path}")
-    
-    # --- Save Plots ---
-    if osr_plot_data is not None:
-        plot_dir = CONFIG["output_dir"]
+    # for seg, res in zip(segments, results):
+    #     if res is None:
+    #         continue
+    #     osr_score = -res["min_distance"]
+    #     osr_decision = "accept" if (osr_threshold and osr_score >= osr_threshold) else "reject"
         
-        # 1. ROC Curve
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.plot(osr_plot_data['fpr'], osr_plot_data['tpr'], color='#2196F3', lw=2,
-                label=f'ROC Curve (AUROC = {osr_plot_data["auroc"]:.4f})')
-        ax.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random')
-        ax.scatter(osr_plot_data['fpr_at_95tpr'], 0.95, color='red', s=80, zorder=5,
-                   label=f'FPR@95%TPR = {osr_plot_data["fpr_at_95tpr"]:.4f}')
-        ax.set_xlabel('False Positive Rate', fontsize=12)
-        ax.set_ylabel('True Positive Rate', fontsize=12)
-        ax.set_title('OSR ROC Curve (Known vs Unknown)', fontsize=14)
-        ax.legend(loc='lower right', fontsize=10)
-        ax.grid(True, alpha=0.3)
-        roc_path = os.path.join(plot_dir, 'osr_roc_curve.png')
-        fig.savefig(roc_path, dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        print(f"  📊 ROC Curve saved to {roc_path}")
-        
-        # 2. Precision-Recall Curve
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.plot(osr_plot_data['recall'], osr_plot_data['precision'], color='#4CAF50', lw=2,
-                label=f'PR Curve (AUPR = {osr_plot_data["aupr"]:.4f})')
-        ax.set_xlabel('Recall', fontsize=12)
-        ax.set_ylabel('Precision', fontsize=12)
-        ax.set_title('OSR Precision-Recall Curve (Known vs Unknown)', fontsize=14)
-        ax.legend(loc='lower left', fontsize=10)
-        ax.grid(True, alpha=0.3)
-        pr_path = os.path.join(plot_dir, 'osr_pr_curve.png')
-        fig.savefig(pr_path, dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        print(f"  📊 PR Curve saved to {pr_path}")
-        
-        # 3. Score Distribution
-        fig, ax = plt.subplots(figsize=(10, 6))
-        ax.hist(osr_plot_data['known_scores'], bins=50, alpha=0.6, color='#2196F3',
-                label=f'Known ({len(osr_plot_data["known_scores"])})', density=True)
-        ax.hist(osr_plot_data['unknown_scores'], bins=50, alpha=0.6, color='#F44336',
-                label=f'Unknown ({len(osr_plot_data["unknown_scores"])})', density=True)
-        if osr_threshold is not None:
-            ax.axvline(x=osr_threshold, color='black', linestyle='--', lw=2,
-                       label=f'Threshold = {osr_threshold:.4f}')
-        ax.set_xlabel('Min Distance Score (higher = more confident)', fontsize=12)
-        ax.set_ylabel('Density', fontsize=12)
-        ax.set_title('Score Distribution: Known vs Unknown', fontsize=14)
-        ax.legend(fontsize=10)
-        ax.grid(True, alpha=0.3)
-        dist_path = os.path.join(plot_dir, 'osr_score_distribution.png')
-        fig.savefig(dist_path, dpi=150, bbox_inches='tight')
-        plt.close(fig)
-        print(f"  📊 Score Distribution saved to {dist_path}")
+    #     output["segments"].append({
+    #         "start": seg["start"],
+    #         "end": seg["end"],
+    #         "gt_label": seg["gt_label"],
+    #         "gt_category": seg["gt_category"],
+    #         "is_known": seg["is_known"],
+    #         "pred_category": res["pred_category"],
+    #         "pred_confidence": float(res["pred_confidence"]),
+    #         "min_distance": float(res["min_distance"]),
+    #         "max_softmax": float(res["max_softmax"]),
+    #         "entropy": float(res["entropy"]),
+    #         "osr_decision": osr_decision,
+    #     })
     
-    print(f"{'=' * 60}\n")
+    # output_path = os.path.join(CONFIG["output_dir"], "pipeline_results.json")
+    # with open(output_path, 'w') as f:
+    #     json.dump(output, f, indent=2)
+    
+    # print(f"\n💾 Results saved to {output_path}")
+    
+    # # --- Save Plots ---
+    # if osr_plot_data is not None:
+    #     plot_dir = CONFIG["output_dir"]
+        
+    #     # 1. ROC Curve
+    #     fig, ax = plt.subplots(figsize=(8, 6))
+    #     ax.plot(osr_plot_data['fpr'], osr_plot_data['tpr'], color='#2196F3', lw=2,
+    #             label=f'ROC Curve (AUROC = {osr_plot_data["auroc"]:.4f})')
+    #     ax.plot([0, 1], [0, 1], color='gray', lw=1, linestyle='--', label='Random')
+    #     ax.scatter(osr_plot_data['fpr_at_95tpr'], 0.95, color='red', s=80, zorder=5,
+    #                label=f'FPR@95%TPR = {osr_plot_data["fpr_at_95tpr"]:.4f}')
+    #     ax.set_xlabel('False Positive Rate', fontsize=12)
+    #     ax.set_ylabel('True Positive Rate', fontsize=12)
+    #     ax.set_title('OSR ROC Curve (Known vs Unknown)', fontsize=14)
+    #     ax.legend(loc='lower right', fontsize=10)
+    #     ax.grid(True, alpha=0.3)
+    #     roc_path = os.path.join(plot_dir, 'osr_roc_curve.png')
+    #     fig.savefig(roc_path, dpi=150, bbox_inches='tight')
+    #     plt.close(fig)
+    #     print(f"  📊 ROC Curve saved to {roc_path}")
+        
+    #     # 2. Precision-Recall Curve
+    #     fig, ax = plt.subplots(figsize=(8, 6))
+    #     ax.plot(osr_plot_data['recall'], osr_plot_data['precision'], color='#4CAF50', lw=2,
+    #             label=f'PR Curve (AUPR = {osr_plot_data["aupr"]:.4f})')
+    #     ax.set_xlabel('Recall', fontsize=12)
+    #     ax.set_ylabel('Precision', fontsize=12)
+    #     ax.set_title('OSR Precision-Recall Curve (Known vs Unknown)', fontsize=14)
+    #     ax.legend(loc='lower left', fontsize=10)
+    #     ax.grid(True, alpha=0.3)
+    #     pr_path = os.path.join(plot_dir, 'osr_pr_curve.png')
+    #     fig.savefig(pr_path, dpi=150, bbox_inches='tight')
+    #     plt.close(fig)
+    #     print(f"  📊 PR Curve saved to {pr_path}")
+        
+    #     # 3. Score Distribution
+    #     fig, ax = plt.subplots(figsize=(10, 6))
+    #     ax.hist(osr_plot_data['known_scores'], bins=50, alpha=0.6, color='#2196F3',
+    #             label=f'Known ({len(osr_plot_data["known_scores"])})', density=True)
+    #     ax.hist(osr_plot_data['unknown_scores'], bins=50, alpha=0.6, color='#F44336',
+    #             label=f'Unknown ({len(osr_plot_data["unknown_scores"])})', density=True)
+    #     if osr_threshold is not None:
+    #         ax.axvline(x=osr_threshold, color='black', linestyle='--', lw=2,
+    #                    label=f'Threshold = {osr_threshold:.4f}')
+    #     ax.set_xlabel('Min Distance Score (higher = more confident)', fontsize=12)
+    #     ax.set_ylabel('Density', fontsize=12)
+    #     ax.set_title('Score Distribution: Known vs Unknown', fontsize=14)
+    #     ax.legend(fontsize=10)
+    #     ax.grid(True, alpha=0.3)
+    #     dist_path = os.path.join(plot_dir, 'osr_score_distribution.png')
+    #     fig.savefig(dist_path, dpi=150, bbox_inches='tight')
+    #     plt.close(fig)
+    #     print(f"  📊 Score Distribution saved to {dist_path}")
+    
+    # print(f"{'=' * 60}\n")
 
 
 if __name__ == "__main__":
