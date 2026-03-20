@@ -5,6 +5,8 @@ import numpy as np
 import librosa
 import json
 import os
+import matplotlib
+matplotlib.use('Agg')  # Non-interactive backend for saving plots
 import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoModel, AutoFeatureExtractor
@@ -23,7 +25,7 @@ CONFIG = {
     "train_csv": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/balanced_sg_dataset1/balanced_train.csv",
     "test_csv": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/balanced_sg_dataset1/balanced_test.csv",
     "base_model": "DBD-research-group/AudioProtoPNet-5-BirdSet-XCL",
-    "save_dir": "../trained_classifier_proto",
+    "save_dir": "/home/users/ntu/ytong005/RCP/trained_classifier_proto",
     
     # Parameters
     "sample_rate": 32000,
@@ -334,7 +336,7 @@ class AudioProtoPNetClassifier(nn.Module):
         """Run a dummy input to find the output shape."""
         # Create dummy audio input (batch 1, 32000 samples)
         try:
-            dummy_input = torch.randn(1, 16000) '
+            dummy_input = torch.randn(1, 16000)
             with torch.no_grad():
                 if hasattr(self.backbone.config, "hidden_size"):
                     return self.backbone.config.hidden_size
@@ -582,9 +584,8 @@ def validate_epoch_multiprototype(model, feature_extractor, val_loader, criterio
     
     return avg_loss, accuracy
 
-
 def run_inference(model, test_loader, feature_extractor, num_classes, device):
-    """Run inference and compute metrics."""
+    """Run inference, compute metrics, and plot AUROC & PR curves."""
     model.eval()
     
     all_labels = []
@@ -592,6 +593,10 @@ def run_inference(model, test_loader, feature_extractor, num_classes, device):
     all_probs = []
     
     print("\nRunning inference on test set...")
+    import torch
+    import numpy as np
+    from tqdm import tqdm
+    
     with torch.no_grad():
         for batch_data in tqdm(test_loader, desc="Testing"):
             if batch_data[0] is None:
@@ -599,8 +604,6 @@ def run_inference(model, test_loader, feature_extractor, num_classes, device):
             
             audio_arrays, labels = batch_data
             
-            # For each sample, we may have multiple chunks (sliding windows)
-            # We'll process them and take the max probability
             batch_probs = []
             
             for i, audio_chunks in enumerate(audio_arrays):
@@ -617,7 +620,7 @@ def run_inference(model, test_loader, feature_extractor, num_classes, device):
                     probs = torch.softmax(logits, dim=1)
                     chunk_probs.append(probs.cpu())
                 
-                # Max voting
+                # Max voting across sliding windows
                 final_probs, _ = torch.max(torch.cat(chunk_probs), dim=0)
                 batch_probs.append(final_probs)
             
@@ -630,7 +633,8 @@ def run_inference(model, test_loader, feature_extractor, num_classes, device):
     all_labels = np.array(all_labels)
     all_preds = np.array(all_preds)
     
-    # Compute metrics
+    # Compute base metrics
+    from sklearn.metrics import accuracy_score, average_precision_score, roc_auc_score, roc_curve, auc, precision_recall_curve
     accuracy = accuracy_score(all_labels, all_preds)
     
     # Top-3 accuracy
@@ -638,7 +642,7 @@ def run_inference(model, test_loader, feature_extractor, num_classes, device):
     top3_correct = np.sum([all_labels[i] in top3_preds[i] for i in range(len(all_labels))])
     top3_acc = top3_correct / len(all_labels)
     
-    # For multi-class single label, convert to binary format for cmAP and AUROC
+    # Binarize labels for cmAP and AUROC
     from sklearn.preprocessing import label_binarize
     y_true_bin = label_binarize(all_labels, classes=range(num_classes))
     
@@ -649,7 +653,90 @@ def run_inference(model, test_loader, feature_extractor, num_classes, device):
     
     try:
         auroc = roc_auc_score(y_true_bin, all_probs, multi_class='ovr', average='macro')
-    except:
+        
+        # ==========================================
+        # 1. Plot Multi-Class AUROC Curve
+        # ==========================================
+        print("  📊 Generating AUROC curve plot...")
+        fpr = dict()
+        tpr = dict()
+        
+        for i in range(num_classes):
+            if np.sum(y_true_bin[:, i]) > 0: 
+                fpr[i], tpr[i], _ = roc_curve(y_true_bin[:, i], all_probs[:, i])
+        
+        if len(fpr) > 0:
+            all_fpr = np.unique(np.concatenate([fpr[i] for i in fpr.keys()]))
+            mean_tpr = np.zeros_like(all_fpr)
+            
+            for i in fpr.keys():
+                mean_tpr += np.interp(all_fpr, fpr[i], tpr[i])
+            
+            mean_tpr /= len(fpr)
+            macro_auc = auc(all_fpr, mean_tpr)
+            
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.plot(all_fpr, mean_tpr, color='#2196F3', lw=3, label=f'Macro-average ROC curve (AUROC = {macro_auc:.4f})')
+            ax.plot([0, 1], [0, 1], 'k--', lw=2, label='Random Guess')
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.set_xlabel('False Positive Rate', fontsize=12)
+            ax.set_ylabel('True Positive Rate', fontsize=12)
+            ax.set_title('Multi-Class ROC Curve (Macro-OVR)', fontsize=14)
+            ax.legend(loc="lower right", fontsize=11)
+            ax.grid(True, alpha=0.3)
+            
+            roc_plot_path = os.path.join(CONFIG.get("save_dir", "."), 'test_auroc_curve.png')
+            fig.savefig(roc_plot_path, dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            print(f"  ✓ Saved AUROC curve to {roc_plot_path}")
+
+        # ==========================================
+        # 2. Plot Multi-Class Precision-Recall Curve (cmAP)
+        # ==========================================
+        print("  📊 Generating Precision-Recall (cmAP) curve plot...")
+        precision = dict()
+        recall = dict()
+        
+        for i in range(num_classes):
+            if np.sum(y_true_bin[:, i]) > 0:
+                precision[i], recall[i], _ = precision_recall_curve(y_true_bin[:, i], all_probs[:, i])
+                
+        if len(precision) > 0:
+            # We create a standardized Recall axis to interpolate the Precision values
+            mean_recall = np.linspace(0, 1, 100)
+            mean_precision = np.zeros_like(mean_recall)
+            
+            for i in precision.keys():
+                # Note: precision_recall_curve returns values in decreasing order of recall.
+                # np.interp requires the x-axis to be increasing, so we reverse the arrays ([::-1])
+                mean_precision += np.interp(mean_recall, recall[i][::-1], precision[i][::-1])
+            
+            mean_precision /= len(precision)
+            
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.plot(mean_recall, mean_precision, color='#4CAF50', lw=3, 
+                    label=f'Macro-average PR curve (cmAP = {cmAP:.4f})')
+            
+            # Baseline is the ratio of positive samples to total samples
+            baseline = np.sum(y_true_bin) / y_true_bin.size
+            ax.plot([0, 1], [baseline, baseline], 'k--', lw=2, label=f'Random (Baseline = {baseline:.4f})')
+            
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+            ax.set_xlabel('Recall', fontsize=12)
+            ax.set_ylabel('Precision', fontsize=12)
+            ax.set_title('Multi-Class Precision-Recall Curve (Macro-Averaged)', fontsize=14)
+            ax.legend(loc="lower left", fontsize=11)
+            ax.grid(True, alpha=0.3)
+            
+            pr_plot_path = os.path.join(CONFIG.get("save_dir", "."), 'test_cmap_pr_curve.png')
+            fig.savefig(pr_plot_path, dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            print(f"  ✓ Saved PR/cmAP curve to {pr_plot_path}")
+            
+    except Exception as e:
+        print(f"  ⚠️ Could not calculate or plot curves: {e}")
         auroc = 0.0
     
     print(f"\n{'='*60}")
@@ -661,6 +748,85 @@ def run_inference(model, test_loader, feature_extractor, num_classes, device):
     print(f"{'='*60}\n")
     
     return accuracy, top3_acc, cmAP, auroc
+    
+# def run_inference(model, test_loader, feature_extractor, num_classes, device):
+#     """Run inference and compute metrics."""
+#     model.eval()
+    
+#     all_labels = []
+#     all_preds = []
+#     all_probs = []
+    
+#     print("\nRunning inference on test set...")
+#     with torch.no_grad():
+#         for batch_data in tqdm(test_loader, desc="Testing"):
+#             if batch_data[0] is None:
+#                 continue
+            
+#             audio_arrays, labels = batch_data
+            
+#             # For each sample, we may have multiple chunks (sliding windows)
+#             # We'll process them and take the max probability
+#             batch_probs = []
+            
+#             for i, audio_chunks in enumerate(audio_arrays):
+#                 if not isinstance(audio_chunks, list):
+#                     audio_chunks = [audio_chunks]
+                
+#                 chunk_probs = []
+#                 for chunk in audio_chunks:
+#                     inputs = feature_extractor([chunk], padding=True, return_tensors="pt")
+#                     inputs = inputs.to(device)
+                    
+#                     outputs = model(inputs)
+#                     logits = outputs[0] if isinstance(outputs, tuple) else outputs
+#                     probs = torch.softmax(logits, dim=1)
+#                     chunk_probs.append(probs.cpu())
+                
+#                 # Max voting
+#                 final_probs, _ = torch.max(torch.cat(chunk_probs), dim=0)
+#                 batch_probs.append(final_probs)
+            
+#             batch_probs = torch.stack(batch_probs)
+#             all_probs.append(batch_probs.numpy())
+#             all_preds.extend(torch.argmax(batch_probs, dim=1).tolist())
+#             all_labels.extend(labels.tolist())
+    
+#     all_probs = np.vstack(all_probs)
+#     all_labels = np.array(all_labels)
+#     all_preds = np.array(all_preds)
+    
+#     # Compute metrics
+#     accuracy = accuracy_score(all_labels, all_preds)
+    
+#     # Top-3 accuracy
+#     top3_preds = np.argsort(all_probs, axis=1)[:, -3:][:, ::-1]
+#     top3_correct = np.sum([all_labels[i] in top3_preds[i] for i in range(len(all_labels))])
+#     top3_acc = top3_correct / len(all_labels)
+    
+#     # For multi-class single label, convert to binary format for cmAP and AUROC
+#     from sklearn.preprocessing import label_binarize
+#     y_true_bin = label_binarize(all_labels, classes=range(num_classes))
+    
+#     try:
+#         cmAP = average_precision_score(y_true_bin, all_probs, average='macro')
+#     except:
+#         cmAP = 0.0
+    
+#     try:
+#         auroc = roc_auc_score(y_true_bin, all_probs, multi_class='ovr', average='macro')
+#     except:
+#         auroc = 0.0
+    
+#     print(f"\n{'='*60}")
+#     print(f"TEST RESULTS:")
+#     print(f"  Top-1 Accuracy: {accuracy:.4f}")
+#     print(f"  Top-3 Accuracy: {top3_acc:.4f}")
+#     print(f"  cmAP:           {cmAP:.4f}")
+#     print(f"  AUROC:          {auroc:.4f}")
+#     print(f"{'='*60}\n")
+    
+#     return accuracy, top3_acc, cmAP, auroc
 
 
 def test_collate_fn(batch):

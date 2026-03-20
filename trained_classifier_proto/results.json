@@ -11,7 +11,7 @@
     "train_csv": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/balanced_sg_dataset1/balanced_train.csv",
     "test_csv": "/home/users/ntu/ytong005/scratch/sg_bird_dataset/balanced_sg_dataset1/balanced_test.csv",
     "base_model": "DBD-research-group/AudioProtoPNet-5-BirdSet-XCL",
-    "save_dir": "./trained_classifier_proto",
+    "save_dir": "/home/users/ntu/ytong005/RCP/trained_classifier_proto",
     "sample_rate": 32000,
     "chunk_batch_size": 16,
     "batch_size": 8,
